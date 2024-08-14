@@ -27,7 +27,7 @@ import os
 import logging
 import unittest
 from decimal import Decimal
-from service.models import Product, Category, db
+from service.models import Product, Category, db, DataValidationError
 from service import app
 from tests.factories import ProductFactory
 
@@ -114,7 +114,7 @@ class TestProductModel(unittest.TestCase):
         self.assertEqual(found_product.description, product.description)
         self.assertEqual(found_product.price, product.price)
 
-   def test_update_a_product(self):
+    def test_update_a_product(self):
         """It should Update a Product"""
         product = ProductFactory()
         product.id = None
@@ -154,7 +154,7 @@ class TestProductModel(unittest.TestCase):
         products = Product.all()
         self.assertEqual(len(products), 5)
 
-     def test_find_by_name(self):
+    def test_find_by_name(self):
         """It should Find a Product by Name"""
         products = ProductFactory.create_batch(5)
         for product in products:
@@ -166,7 +166,8 @@ class TestProductModel(unittest.TestCase):
         for product in found:
             self.assertEqual(product.name, name)
 
-      def test_find_by_availability(self):
+
+    def test_find_by_availability(self):
         """It should Find Products by Availability"""
         products = ProductFactory.create_batch(10)
         for product in products:
@@ -174,11 +175,11 @@ class TestProductModel(unittest.TestCase):
         available = products[0].available
         count = len([product for product in products if product.available == available])
         found = Product.find_by_availability(available)
-            self.assertEqual(found.count(), count)
+        self.assertEqual(found.count(), count)
         for product in found:
             self.assertEqual(product.available, available)
 
-      def test_find_by_category(self):
+    def test_find_by_category(self):
         """It should Find Products by Category"""
         products = ProductFactory.create_batch(10)
         for product in products:
@@ -189,3 +190,59 @@ class TestProductModel(unittest.TestCase):
         self.assertEqual(found.count(), count)
         for product in found:
             self.assertEqual(product.category, category)
+
+    def test_deserialize_invalid_category(self):
+        """Test for AttributeError in deserialize() due to invalid category"""
+        product = Product()
+        with self.assertRaises(DataValidationError):
+            product.deserialize({
+                "name": "Test Product",
+                "description": "A product",
+                "price": "10.00",
+                "available": True,
+                "category": "INVALID_CATEGORY"
+            })
+
+    def test_deserialize_missing_field(self):
+        """Test for KeyError in deserialize() due to missing required fields"""
+        product = Product()
+        with self.assertRaises(DataValidationError):
+            product.deserialize({
+                "name": "Test Product",
+                "description": "A product",
+                "price": "10.00",
+                "available": True
+                # Missing 'category'
+            })
+
+    def test_deserialize_invalid_available_type(self):
+        """Test for TypeError in deserialize() due to invalid type for 'available'"""
+        product = Product()
+        with self.assertRaises(DataValidationError):
+            product.deserialize({
+                "name": "Test Product",
+                "description": "A product",
+                "price": "10.00",
+                "available": "not_a_boolean",
+                "category": "CLOTHS"
+            })
+
+    def test_find_by_price_decimal(self):
+        """Test find_by_price with a Decimal"""
+        product = ProductFactory(price=Decimal("9.99"))
+        product.create()
+
+        # Query by price
+        found_products = Product.find_by_price(Decimal("9.99")).all()  # Fix here
+        self.assertEqual(len(found_products), 1)
+        self.assertEqual(found_products[0].price, Decimal("9.99"))
+
+    def test_find_by_price_string(self):
+        """Test find_by_price with a string"""
+        product = ProductFactory(price="19.99")
+        product.create()
+
+        # Query by price
+        found_products = Product.find_by_price("19.99").all()  # Fix here
+        self.assertEqual(len(found_products), 1)
+        self.assertEqual(found_products[0].price, Decimal("19.99"))
